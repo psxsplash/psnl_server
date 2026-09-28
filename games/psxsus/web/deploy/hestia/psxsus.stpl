@@ -1,0 +1,83 @@
+#=========================================================================#
+# PSXSUS spectator - HestiaCP nginx template (HTTPS)                      #
+#                                                                         #
+# The SSL half of psxsus.tpl. Read the notes there; only the listener,    #
+# the certificate block and the SSL-side includes differ.                 #
+#                                                                         #
+# nginx older than 1.25.1 does not know `http2 on;` - on those, delete    #
+# that line and use `listen %ip%:%web_ssl_port% ssl http2;` instead.      #
+# Hestia 1.8 ships new enough nginx for the form below.                   #
+#=========================================================================#
+
+server {
+    listen      %ip%:%web_ssl_port% ssl;
+    http2       on;
+    server_name %domain_idn% %alias_idn%;
+
+    root        %sdocroot%;
+
+    access_log  /var/log/nginx/domains/%domain%.log combined;
+    access_log  /var/log/nginx/domains/%domain%.bytes bytes;
+    error_log   /var/log/nginx/domains/%domain%.error.log error;
+
+    ssl_certificate     %ssl_pem%;
+    ssl_certificate_key %ssl_key%;
+    ssl_stapling        on;
+    ssl_stapling_verify on;
+
+    include %home%/%user%/conf/web/%domain%/nginx.hsts.conf*;
+
+    # Served off disk, not proxied - renewals depend on it. See psxsus.tpl.
+    location ^~ /.well-known/acme-challenge/ {
+        alias %home%/%user%/web/%domain%/public_html/.well-known/acme-challenge/;
+        try_files $uri =404;
+    }
+
+    location /error/ {
+        alias %home%/%user%/web/%domain%/document_errors/;
+    }
+
+    # --- the live feeds ---------------------------------------------------
+    # Server-Sent Events: unbuffered, uncompressed, long-lived. The reasoning
+    # for every line is in psxsus.tpl.
+    location ^~ /api/stream/ {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+        gzip off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # --- everything else --------------------------------------------------
+    location / {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 60s;
+
+        limit_except GET HEAD {
+            deny all;
+        }
+    }
+
+    location ~ /\.(?!well-known\/) {
+        deny all;
+        return 404;
+    }
+
+    include %home%/%user%/conf/web/%domain%/nginx.ssl.conf_*;
+}

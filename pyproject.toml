@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psnl"
+version = "0.2.0"
+description = "PSNL: networked multiplayer for psxsplash games on the PlayStation 1"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = []
+
+# ONE DISTRIBUTION, NOT THREE.
+#
+# The server, the bridge and the wire format used to be three installable packages,
+# with the wire format declared as a path dependency of the other two. That only
+# resolved when all three sat inside one parent directory, so the image had to be
+# built from a directory ABOVE the repo and needed --no-deps and --find-links to
+# stop pip looking for `psnl` on PyPI. A fork could not be built from a clone of
+# itself, which is the one thing a fork has to be able to do.
+#
+# They are one thing anyway: the server and the bridge are two ends of the same
+# link and share exactly one implementation of framing and CRC. Shipping them
+# together is what keeps a wire bug to a single home.
+[project.optional-dependencies]
+# The bridge runs headless with just a serial port; the GUI is separate so a
+# server or a CI box never pulls in Qt.
+bridge = ["pyserial>=3.5"]
+gui = ["pyserial>=3.5", "PySide6>=6.6", "qasync>=0.27"]
+# Everything needed to run a test suite against this package. There is no suite in
+# this repository - see the note under [tool.setuptools.packages.find] - but a fork
+# writing its own game will want these, and so does ours.
+#
+# lupa is here because a game plug-in's real counterpart is the console's Lua, and
+# the only honest way to check they agree is to execute it. Tests importorskip it,
+# so leaving it out makes those checks vanish silently rather than fail.
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "lupa>=2.0", "pyserial>=3.5"]
+# Linux/macOS speedup only; the stdlib event loop is fine, and Windows dev boxes
+# cannot install it.
+fast = ["uvloop>=0.19; sys_platform != 'win32'"]
+
+[project.scripts]
+psnl-server = "psnl_server.__main__:main"
+psnl-bridge = "psnl_bridge.__main__:main"
+
+[tool.setuptools.packages.find]
+# `games` is included on purpose: a plug-in is loaded by module path, so it has to
+# be importable from the installed distribution. Fork this repo, drop your rules in
+# games/<yours>/, and `--game games.<yours>.game:YourGame` works with no path
+# wrangling.
+include = ["psnl*", "psnl_server*", "psnl_bridge*", "games*"]
+# THERE IS NO TEST SUITE IN THIS REPOSITORY, and that is deliberate. What people
+# clone and fork is the product; a suite asserting on our own source layout has no
+# meaning inside somebody else's fork of it, and shipping one in a wheel invites it
+# to be read as public API. Ours lives in the workspace that holds the checkouts.
+#
+# The exclusion stays as a guard, so a `tests/` folder appearing here later does
+# not silently end up in a release.
+#
+# `psnl_server.testing` is NOT a test package and is deliberately not excluded:
+# FakeConsole is a tool for people writing games, so it ships.
+exclude = ["tests", "tests.*", "*.tests", "*.tests.*", "examples", "examples.*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"games.psxsus.web" = ["static/*", "static/**/*"]

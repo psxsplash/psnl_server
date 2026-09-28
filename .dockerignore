@@ -1,0 +1,21 @@
+# The build context is this repository, and the image needs nearly all of it.
+# Only exclude what would bloat the context or leak into the wheel.
+#
+# This file used to be an "exclude everything, then re-include four directories"
+# affair, because the build context was the workspace ABOVE this repo, which also
+# held the engine, a Unity project and two full pcsx-redux checkouts. Gigabytes
+# went to the daemon on every build. The repo is self-contained now, so the context
+# is small by construction and this can say what it means.
+
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+
+# The sample plug-in is documentation, not something the image runs.
+examples/

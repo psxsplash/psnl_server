@@ -1,0 +1,60 @@
+# PSNL server.
+#
+#   docker compose up --build
+#
+# Runs from this directory. There is nothing above it that the build needs.
+
+services:
+  psnl-server:
+    build:
+      context: .
+    image: psnl-server:latest
+    container_name: psnl-server
+    restart: unless-stopped
+    ports:
+      # Real hardware, via the Python bridge, which carries raw serial bytes.
+      - "6699:6699"
+      # PCSX-Redux's SIO1 client, which speaks protobuf and cannot speak raw.
+      - "6700:6700"
+      # PSXSUS's spectator web view.
+      #
+      # UNAUTHENTICATED AND OMNISCIENT BY DESIGN: anybody who can reach this
+      # port can see who the impostors are, where every player is standing and
+      # what every vote was. That is the whole feature, and it is why the
+      # server refuses to start it unless PSXSUS_WEB_PORT is set. Only PUBLIC
+      # rooms are ever shown - a private room is the players' opt-out.
+      #
+      # Do not publish this to the internet beside a game people care about
+      # winning. Bind it to a LAN address (`127.0.0.1:8089:8089`) or put it
+      # behind whatever your reverse proxy uses for auth.
+      - "8089:8089"
+    environment:
+      PSNL_LOG_LEVEL: INFO
+      PSXSUS_WEB_PORT: 8089
+      # Where the win/loss history is kept. Without it the numbers are right
+      # but forgotten on every restart.
+      PSXSUS_WEB_STATS: /data/spectator-stats.json
+      # Uncomment when a reverse proxy sits in front (see
+      # games/psxsus/web/deploy/hestia/). Without it every spectator looks like
+      # the proxy and the fair-play warning silently stops working; with it,
+      # X-Real-IP from THAT address is believed and nobody else's is.
+      # PSXSUS_WEB_TRUST_PROXY: 127.0.0.1
+      # The game's server-side rules, as a module spec. The server itself knows
+      # nothing about rooms, roles or votes: delete this line and the same image
+      # is a pure relay for any other psxsplash game.
+      #
+      # Running your own? Fork this repo, put your rules in games/<yours>/, and
+      # point this at games.<yours>.game:YourGame.
+      PSNL_GAME: games.psxsus.game:PSXSUSGame
+      # The console replicates its avatar at 30Hz (c_snapshotIntervalDt), so
+      # ticking faster only builds latency. Per-session pacing trims this further
+      # for links that cannot keep up.
+      PSNL_SNAPSHOT_HZ: "30"
+    volumes:
+      # Only the spectator's stats file lives here. The server itself keeps
+      # nothing on disk - rooms are gone when the last console leaves, by design.
+      - psnl-data:/data
+    stop_grace_period: 5s
+
+volumes:
+  psnl-data:

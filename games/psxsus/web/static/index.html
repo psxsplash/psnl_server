@@ -1,0 +1,47 @@
+<!doctype html>
+<!--
+  PSXSUS spectator.
+
+  One page, two views, routed on the hash so that a deep link (#/room/3) never
+  needs a server-side rewrite:
+
+      #/          the room list and the server's stats
+      #/room/N    a live overhead view of room N
+
+  Everything it draws comes from the same data the PlayStation draws from -
+  /maps/mapN.json and /art/*.png are written by PSXSUS/Art/make_web.py out of
+  the very MapBuilder objects the disc's tilemaps are built from.
+-->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>PSXSUS Spectator</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>PSXSUS<b>SPECTATOR</b></span>
+    </a>
+    <div class="live" id="live-strip" aria-live="polite"></div>
+    <div class="conn" id="conn" data-state="connecting">connecting</div>
+  </header>
+
+  <!-- Rendered by app.js only when the server says this browser's address is
+       also a console's. See Spectator.fair_play for why it warns rather than
+       blocks. -->
+  <div id="fairplay" hidden></div>
+
+  <main id="view"></main>
+
+  <footer class="foot">
+    Read-only spectator view &middot; public rooms only &middot; private rooms
+    are never listed.
+  </footer>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

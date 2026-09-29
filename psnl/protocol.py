@@ -359,40 +359,44 @@ class FrameParser:
 
     def _try_parse_one(self) -> Frame | None:
         buf = self._buf
+        pos = 0
 
-        # Hunt for the sync byte, discarding anything before it.
-        sync_at = buf.find(SYNC_BYTE)
-        if sync_at < 0:
-            buf.clear()
-            return None
-        if sync_at > 0:
-            del buf[:sync_at]
+        try:
+            while True:
+                # Hunt for the sync byte, discarding anything before it.
+                pos = buf.find(SYNC_BYTE, pos)
+                if pos < 0:
+                    pos = len(buf)
+                    return None
 
-        if len(buf) < 1 + _HEADER.size:
-            return None  # need more bytes
+                if len(buf) - pos < 1 + _HEADER.size:
+                    return None  # need more bytes
 
-        header = PacketHeader.unpack(bytes(buf[1 : 1 + _HEADER.size]))
+                header = PacketHeader.unpack(bytes(buf[pos + 1 : pos + 1 + _HEADER.size]))
 
-        if header.length > MAX_PAYLOAD:
-            # Impossible length: this was a mis-sync, hunt again from the byte
-            # after the false sync (netlink.cpp:46).
-            self.resyncs += 1
-            del buf[:1]
-            return self._try_parse_one()
+                if header.length > MAX_PAYLOAD:
+                    # Impossible length: this was a mis-sync, hunt again from the byte
+                    # after the false sync (netlink.cpp:46).
+                    self.resyncs += 1
+                    pos += 1
+                    continue
 
-        total = 1 + _HEADER.size + header.length + 2
-        if len(buf) < total:
-            return None  # need more bytes
+                total = 1 + _HEADER.size + header.length + 2
+                if len(buf) - pos < total:
+                    return None  # need more bytes
 
-        body = bytes(buf[1 : 1 + _HEADER.size + header.length])
-        payload = body[_HEADER.size :]
-        (rx_crc,) = struct.unpack_from("<H", buf, 1 + _HEADER.size + header.length)
+                body = bytes(buf[pos + 1 : pos + 1 + _HEADER.size + header.length])
+                payload = body[_HEADER.size :]
+                (rx_crc,) = struct.unpack_from("<H", buf, pos + 1 + _HEADER.size + header.length)
 
-        if crc16(body) != rx_crc:
-            self.crc_errors += 1
-            del buf[:1]  # drop the false sync and resync
-            return self._try_parse_one()
+                if crc16(body) != rx_crc:
+                    self.crc_errors += 1
+                    pos += 1  # drop the false sync and resync
+                    continue
 
-        del buf[:total]
-        self.frames_received += 1
-        return Frame(header=header, payload=payload)
+                pos += total
+                self.frames_received += 1
+                return Frame(header=header, payload=payload)
+        finally:
+            # One deletion per call, however many false syncs were skipped.
+            del buf[:pos]
